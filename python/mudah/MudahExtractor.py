@@ -3,6 +3,7 @@ Python source code to extract listing from mudah.my
 
 """
 from functools import total_ordering
+from mudah.config import General, Region, PropertyCategory
 
 import pandas as pd
 import requests
@@ -14,53 +15,15 @@ from datetime import datetime, timedelta
 import dateutil.relativedelta as rd
 import math
 
-
-# TODO - Advance criteria
-# TODO - Logging
-# TODO - Wanted search area is tough because of IDs
-
+# TODO - Change print to logging
 
 class PropertyExtractor:
     """
     Extractor for getting property dataset from mudah.my
     """
 
-    __base_url__ = "http://www.mudah.my"
-    __chrome_path__ = 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe %s'
-
-    # Convert given region into a region path according to mudah.my.
-    # Note that this mapping might change according to mudah.my.
-    __region_mapping__ = {
-        "Kuala Lumpur": "/Kuala-Lumpur",
-        "Neighbouring regions": "/Neighbouring-9",
-        "Entire Malaysia": "/Malaysia",
-        "Johor": "/Johor",
-        "Kedah": "/Kedah",
-        "Kelantan": "/Kelantan",
-        "Labuan": "/Labuan",
-        "Melaka": "/Melaka",
-        "Negeri Sembilan": "/Negeri-Sembilan",
-        "Pahang": "/Pahang",
-        "Penang": "/Penang",
-        "Perak": "/Perak",
-        "Perlis": "/Perlis",
-        "Putrajaya": "/Putrajaya",
-        "Selangor": "/Selangor",
-        "Sabah": "/Sabah",
-        "Sarawak": "/Sarawak",
-        "Terengganu": "/Terengganu"
-    }
-
-    # Convert given property category into a property category path according to mudah.my.
-    # Note that this mapping might change according to mudah.my.
-    # Property is current only for rent
-    __property_mapping__ = {
-        "Apartments": "/Apartments-for-rent-2020",
-        "Houses": "/Houses-for-rent-2040",
-        "Commercial Properties": "/Commercial-Properties-for-rent-2060",
-        "Land": "/Land-for-rent-2080",
-        "Rooms": "/Rooms-for-rent-2100"
-    }
+    __base_url__ = General.MUDAH_URL.value
+    __chrome_path__ = General.CHROME_PATH.value
 
     # scraping from mudah.my. Will collect every properties
     def __scraping__(self, region_path, property_category_path, wanted_region=[]):
@@ -81,9 +44,9 @@ class PropertyExtractor:
         """
 
         # Add search criteria
+        print(region_path)
+        print(property_category_path)
         search_criteria = [region_path, property_category_path]
-
-        # TODO - Advance criteria
 
         # Add advance criteria, dependent on property_category
         filter_criteria = {}
@@ -120,12 +83,12 @@ class PropertyExtractor:
         links = []
         bedrooms = []
         bathrooms = []
-        categories = []
         sizes = []
         areas = []
         dates_posted = []
 
         final_df = pd.DataFrame()
+        pages = 10
         for page in range(1, pages + 1):
 
             if exceed_minimum:
@@ -171,12 +134,11 @@ class PropertyExtractor:
 
                 bedroom = self.__get_el_string__(element.find("div", class_="bedroom"))
                 bathroom = self.__get_el_string__(element.find("div", class_="bathroom"))
-                category = self.__get_el_string__(element.find("div", {"title": "Category"}))
-
+                
+                # House square feet
                 size = self.__get_el_string__(element.find("div", class_="size"))
-
                 if not size == "":
-                    size = int(size.replace(" sq.ft", ""))
+                    size = float(size.replace(" sq.ft", ""))
                 else:
                     size = 0
 
@@ -213,13 +175,11 @@ class PropertyExtractor:
                 prices.append(price)
                 bedrooms.append(bedroom)
                 bathrooms.append(bathroom)
-                categories.append(category)
                 sizes.append(size)
                 areas.append(area)
                 dates_posted.append(date_posted)
 
             df = pd.concat([pd.Series(titles),
-                            pd.Series(categories),
                             pd.Series(areas),
                             pd.Series(sizes),
                             pd.Series(dates_posted),
@@ -227,7 +187,7 @@ class PropertyExtractor:
                             pd.Series(bathrooms),
                             pd.Series(prices),
                             pd.Series(links)], axis=1)
-            df.columns = [["Title", "Category", "Area", "Size", "Date Posted", "Bedroom", "Bathroom", "Price", "Links"]]
+            df.columns = [["Title", "Area", "Size", "Date Posted", "Bedroom", "Bathroom", "Price", "Links"]]
             final_df = final_df.append(df, ignore_index=True)
 
             titles.clear()
@@ -235,57 +195,34 @@ class PropertyExtractor:
             links.clear()
             bedrooms.clear()
             bathrooms.clear()
-            categories.clear()
             sizes.clear()
             areas.clear()
             dates_posted.clear()
 
         print("Parsing has ended...")
+
+        # FIXED - Yousoff : Multi index bug
+        final_df.columns = final_df.columns.get_level_values(0)
         final_df["Date Posted"] = pd.to_datetime(final_df["Date Posted"])
         return final_df
 
     @classmethod
-    def find_properties(cls, region="Kuala Lumpur", property_category="Apartment", wanted_areas=[],
+    def find_properties(cls, region=Region.KUALA_LUMPUR, property_category=PropertyCategory.APARTMENT, wanted_areas=[],
                         unwanted_areas=[]):
         """
 
         Find datasets by providing any search and filter criterias.
 
-        :param region:
-            Kuala Lumpur
-            Neighbouring regions
-            Entire Malaysia
-            Johor
-            Kedah
-            Kelantan
-            Labuan
-            Melaka
-            Negeri Sembilan
-            Pahang
-            Penang
-            Perak
-            Perlis
-            Putrajaya
-            Selangor
-            Sabah
-            Sarawak
-            Terengganu
+        :param region: Example Region.KUALA_LUMPUR
+            :type Region
 
-            :type String
-
-        :param property_category :
-            Apartments
-            Houses
-            Commercial Properties
-            Land
-            Rooms
-
-            :type String
+        :param property_category : Example PropertyCategory.APARTMENT
+            :type PropertyCategory
 
         :param wanted_area: Not yet implemented
             :type List of String
 
-        :param unwanted_area:
+        :param unwanted_area: Not yet implemented
             :type List of String
 
         :return:
@@ -295,8 +232,8 @@ class PropertyExtractor:
 
         """
 
-        region_path = cls.__region_mapping__.get(region)
-        property_category_path = cls.__property_mapping__.get(property_category)
+        region_path = region.value
+        property_category_path = property_category.value
 
         # Scraping from URL
         df = cls.__scraping__(cls, region_path, property_category_path)
@@ -306,7 +243,10 @@ class PropertyExtractor:
         df = cls.__filtering__(cls, df, unwanted_areas, minimum_rental)
 
         # Export to excel
-        df.to_excel("properties.xlsx", sheet_name="Mudah " + region + " - " + property_category, header=True,
+        filename = "Mudah Properties " + datetime.today().strftime('%Y%m%d') + ".xlsx"
+
+        # BUG - index False cause column jadi pelik
+        df.to_excel(filename, sheet_name="" + region.name + " - " + property_category.name, header=True,
                     index=False)
         return df
 
@@ -323,6 +263,9 @@ class PropertyExtractor:
         if element is None:
             return ""
         else:
-            return element.string.strip()
-
+            t = element.string
+            if t is not None :
+                return t.strip()
+            else:
+                return ""
 
