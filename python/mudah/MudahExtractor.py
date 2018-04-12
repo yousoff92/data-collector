@@ -3,7 +3,7 @@ Python source code to extract listing from mudah.my
 
 """
 from functools import total_ordering
-from mudah.config import General, Region, PropertyCategory
+from mudah.config import General, Region, PropertyCategory, SupportedPropertyRegionArea, PropertyArea
 
 import pandas as pd
 import requests
@@ -26,15 +26,15 @@ class PropertyExtractor:
     __chrome_path__ = General.CHROME_PATH.value
 
     # scraping from mudah.my. Will collect every properties
-    def __scraping__(self, region_path, property_category_path, wanted_region=[]):
+    def __scraping__(self, region, property_category, search_area, wanted_region=[]):
         """
         Class method to scrap data from mudah.my
 
-        :param region_path:
-            :type String
+        :param region:
+            :type Region
 
-        :param property_category_path:
-            :type String
+        :param property_category:
+            :type PropertyCategory
 
         :param wanted_region:
             :type List of String
@@ -44,15 +44,19 @@ class PropertyExtractor:
         """
 
         # Add search criteria
-        print(region_path)
-        print(property_category_path)
-        search_criteria = [region_path, property_category_path]
+        print(region.value)
+        print(property_category.value)
+        search_criteria = [region.value, property_category.value]
 
         # Add advance criteria, dependent on property_category
         filter_criteria = {}
         hide_images = {'th': '1'}
         max_monthly_rent = {'mre': '2'}
         max_sqft = {'se': '1'}
+
+        if search_area is not None:
+          pass
+
         filter_criteria.update(hide_images)
         filter_criteria.update(max_monthly_rent)
         filter_criteria.update(max_sqft)
@@ -88,7 +92,11 @@ class PropertyExtractor:
         dates_posted = []
 
         final_df = pd.DataFrame()
-        pages = 10
+        
+        # To prevent over-scraping
+        if General.PAGE_THRESHOLD.value != -1 and General.PAGE_THRESHOLD.value < pages :
+          pages = General.PAGE_THRESHOLD.value
+
         for page in range(1, pages + 1):
 
             if exceed_minimum:
@@ -207,7 +215,7 @@ class PropertyExtractor:
         return final_df
 
     @classmethod
-    def find_properties(cls, region=Region.KUALA_LUMPUR, property_category=PropertyCategory.APARTMENT, wanted_areas=[],
+    def find_properties(cls, region=Region.KUALA_LUMPUR, property_category=PropertyCategory.APARTMENT, search_area=None, wanted_areas=[],
                         unwanted_areas=[]):
         """
 
@@ -232,18 +240,15 @@ class PropertyExtractor:
 
         """
 
-        region_path = region.value
-        property_category_path = property_category.value
-
         # Scraping from URL
-        df = cls.__scraping__(cls, region_path, property_category_path)
+        df = cls.__scraping__(cls, region, property_category, search_area)
 
         # Filter results from scraping
         minimum_rental = 400
         df = cls.__filtering__(cls, df, unwanted_areas, minimum_rental)
 
         # Export to excel
-        filename = "Mudah Properties " + datetime.today().strftime('%Y%m%d') + ".xlsx"
+        filename = "Mudah Properties " + datetime.today().strftime('%Y%m%d%H%M%S') + ".xlsx"
 
         # BUG - index False cause column jadi pelik
         df.to_excel(filename, sheet_name="" + region.name + " - " + property_category.name, header=True,
