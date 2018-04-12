@@ -9,7 +9,9 @@ P/s : I did this because Mudah.my doesn't have export feature...
 
 Execute these commands, depends on your current directory.
 
+```
 from mudah.config import General, Region, PropertyCategory
 from mudah.MudahExtractor import PropertyExtractor
 prop = PropertyExtractor()
 df = prop.find_properties(region=Region.SELANGOR)
+```
