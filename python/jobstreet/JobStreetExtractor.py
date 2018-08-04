@@ -193,7 +193,9 @@ class JobStreetExtractor:
 
                 # Get salary information
                 if sal_el:
-                    salaries.append(sal_el.find("font").string)
+                    font = sal_el.find("font")
+                    if font:
+                      salaries.append(sal_el.find("font").string)
                 else:
                     salaries.append(None)
 

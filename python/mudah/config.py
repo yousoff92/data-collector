@@ -5,7 +5,7 @@ class General(Enum):
   CHROME_PATH = 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe %s'
 
   # If set to 10, it will retrieve 10 pages with latest properties. Set to -1 to get all available properties.  
-  PAGE_THRESHOLD = -1 
+  PAGE_THRESHOLD = 3
 
 class Region(Enum):
   KUALA_LUMPUR = "/Kuala-Lumpur"

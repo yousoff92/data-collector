@@ -14,8 +14,16 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import dateutil.relativedelta as rd
 import math
+import logging as logger
+import mechanicalsoup
 
-# TODO - Change print to logging
+# For logging purpose
+logger.basicConfig(level=logger.DEBUG,
+                   format='%(asctime)s %(levelname)-8s %(message)s',
+                   datefmt='%a, %d %b %Y %H:%M:%S',
+                   )
+urllib3_logger = logger.getLogger('urllib3')
+urllib3_logger.setLevel(logger.CRITICAL)
 
 class PropertyExtractor:
     """
@@ -24,6 +32,10 @@ class PropertyExtractor:
 
     __base_url__ = General.MUDAH_URL.value
     __chrome_path__ = General.CHROME_PATH.value
+
+    def __authenticate__(self):
+        browser = mechanicalsoup.StatefulBrowser()
+        return browser
 
     # scraping from mudah.my. Will collect every properties
     def __scraping__(self, region, property_category, search_area, wanted_region=[]):
@@ -43,9 +55,11 @@ class PropertyExtractor:
             :type pandas.core.frame.DataFrame
         """
 
+        browser = self.__authenticate__(self)
+
         # Add search criteria
-        print(region.value)
-        print(property_category.value)
+        logger.info(region.value)
+        logger.info(property_category.value)
         search_criteria = [region.value, property_category.value]
 
         # Add advance criteria, dependent on property_category
@@ -68,14 +82,14 @@ class PropertyExtractor:
         # Init request to get total list
         url_parts[4] = urlencode(filter_criteria)
         page_url = urlparse.urlunparse(url_parts)
-        result = requests.get(page_url)
+        response = browser.get(page_url)
 
-        if result.status_code != 200:
+        if response.status_code != 200:
             raise ConnectionError("Cannot connect to " + page_url)
 
         # get total lists
-        total_list = BeautifulSoup(result.content).find("div", class_="list-total").string
-        print("Attempt to parse " + total_list + " properties at most")
+        total_list = BeautifulSoup(response.content, "html.parser").find("div", class_="list-total").string
+        logger.info("Attempt to parse " + total_list + " properties at most")
         pages = math.ceil(int(total_list) / 40)  # 40 is item per page
 
         # only choose up to last 1 months
@@ -108,13 +122,13 @@ class PropertyExtractor:
             url_parts[4] = urlencode(filter_criteria)
             page_url = urlparse.urlunparse(url_parts)
 
-            print("Parsing page " + str(page) + " ... " + page_url)
-            result = requests.get(page_url)
+            logger.info("Parsing page " + str(page) + " ... " + page_url)
+            response = browser.get(page_url)
 
-            if result.status_code != 200:
+            if response.status_code != 200:
                 raise ConnectionError("Cannot connect to " + page_url)
 
-            raw_listing = BeautifulSoup(result.content).find_all("div", {'class': 'list_ads'})
+            raw_listing = BeautifulSoup(response.content, "html.parser").find_all("div", {'class': 'list_ads'})
 
             for element in raw_listing:
 
@@ -207,7 +221,7 @@ class PropertyExtractor:
             areas.clear()
             dates_posted.clear()
 
-        print("Parsing has ended...")
+        logger.info("Parsing has ended...")
 
         # FIXED - Yousoff : Multi index bug
         final_df.columns = final_df.columns.get_level_values(0)
@@ -250,7 +264,6 @@ class PropertyExtractor:
         # Export to excel
         filename = "Mudah Properties " + datetime.today().strftime('%Y%m%d%H%M%S') + ".xlsx"
 
-        # BUG - index False cause column jadi pelik
         df.to_excel(filename, sheet_name="" + region.name + " - " + property_category.name, header=True,
                     index=False)
         return df
