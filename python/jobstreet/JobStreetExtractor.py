@@ -15,12 +15,19 @@ from datetime import datetime, timedelta
 import dateutil.relativedelta as rd
 import math
 import mechanicalsoup
-
+import logging as logger
 import os
 clear = lambda: os.system('cls') #on Windows System
 
 # TODO - Advance criteria
-# TODO - Logging
+
+# For logging purpose
+logger.basicConfig(level=logger.DEBUG,
+                   format='%(asctime)s %(levelname)-8s %(message)s',
+                   datefmt='%a, %d %b %Y %H:%M:%S',
+                   )
+urllib3_logger = logger.getLogger('urllib3')
+urllib3_logger.setLevel(logger.CRITICAL)
 
 class JobStreetExtractor:
     """
@@ -112,9 +119,7 @@ class JobStreetExtractor:
         filter_criteria.update(page_criteria)
         url_parts[4] = urlencode(filter_criteria)
         page_url = urlparse.urlunparse(url_parts)
-
         response = browser.open(page_url)
-        print(page_url)
 
          # get total lists
         total_list = BeautifulSoup(response.content, "html.parser").find("span", class_="pagination-result-count").string
@@ -122,10 +127,10 @@ class JobStreetExtractor:
         pages = 1
 
         if total_list is not None:
-          print(total_list)
+          logger.info(str(total_list))
           total_list = total_list[total_list.find("of")+len("of"):total_list.rfind("jobs")]
           total_list = total_list.strip().replace(',', '')
-          print("Attempt to parse " + str(total_list) + " jobs at most")
+          logger.info("Attempt to parse " + str(total_list) + " jobs at most")
 
           pages = math.ceil(int(total_list) / 40)  # 40 is item per page
 
@@ -149,49 +154,56 @@ class JobStreetExtractor:
             url_parts[4] = urlencode(filter_criteria)
             page_url = urlparse.urlunparse(url_parts)
 
-            print(page_url)
+            logger.info("Processing Page " + str(page) + " : " + page_url)
             response = browser.open(page_url)
 
             if response.status_code != 200:
               raise ConnectionError("Cannot connect to " + page_url)
 
-            #raw_listing = BeautifulSoup(response.content, "html.parser").find_all("div", {'id': 'job_listing_panel'})
+            # Get each job card
             raw_listing = BeautifulSoup(response.content, "html.parser").find_all("div",
                                 {
-                                    'id' : lambda value: value and value.startswith("job_ad"),
-                                    'itemtype' : 'http://schema.org/JobPosting'
+                                    'id' : lambda value: value and value.startswith("job_ad")
                                 })
 
-
+            # For each job card, get job informations
             for element in raw_listing:
 
-                job_el = element.find("a", {'id' : lambda value: value and value.startswith("position_title")})
+                # Get job general information
+                job_el = element.find("a", {'class' : lambda value: value and value.startswith("position-title-link")})
                 job_titles.append(job_el.get('data-job-title'))
                 job_urls.append(job_el.get('href'))
 
+                # Get company information
                 com_el = element.find("a", {'id' : lambda value: value and value.startswith("company_name")})
 
                 if com_el is None:
                     com_el = element.find("span", {'id': lambda value: value and value.startswith("company_name")})
                     com_names.append(com_el.string)
                     com_urls.append(None)
-
                 else:
                     com_names.append(com_el.find('span').string)
                     com_urls.append(com_el.get('href'))
 
+                # Get location information
                 loc_el = element.find("li", {'class' : 'job-location'})
                 locations.append(loc_el.get('title'))
 
                 sal_el =  element.find("li", {'id' : 'job_salary'})
 
+                # Get salary information
                 if sal_el:
                     salaries.append(sal_el.find("font").string)
                 else:
                     salaries.append(None)
 
-                des_el = element.find("li", {'itemprop' : 'description'})
-                descriptions.append(des_el.string)
+                # Get job description
+                des_el = element.find("ul", {'id' : lambda value: value and value.startswith("job_desc_detail")}).find("li",recursive=False)
+
+                if des_el:
+                    descriptions.append(des_el.string)
+                else:
+                    descriptions.append(None)
 
             df = pd.concat([pd.Series(job_titles),
                             pd.Series(job_urls),
@@ -205,8 +217,9 @@ class JobStreetExtractor:
             df.columns = [["Job Titles", "Job URLS", "Company Name", "Company URLS", "Location", "Salaries", "Descriptions"]]
             final_df = final_df.append(df, ignore_index=True)
 
+        final_df.columns = final_df.columns.get_level_values(0)
+        logger.info("Parsing has ended...")
         return final_df
-        print("Parsing has ended...")
 
     @classmethod
     def find_jobs(cls, keyword=None, location=None, minSalary=None, maxSalary=None, minExperience=None, maxExperience=None):
@@ -216,6 +229,5 @@ class JobStreetExtractor:
         # Export to excel
         filename = "Jobstreet " + datetime.today().strftime('%Y%m%d%H%M%S') + ".xlsx"
 
-        # BUG - index False cause column jadi pelik
         df.to_excel(filename, sheet_name="Jobstreet", header=True, index=False)
-        return
+        return df
