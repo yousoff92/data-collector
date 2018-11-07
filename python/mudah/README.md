@@ -27,3 +27,7 @@ from mudah.MudahExtractor import PropertyExtractor
 prop = PropertyExtractor()
 df = prop.find_properties(region=Region.SELANGOR)
 ```
+
+# Sample
+
+See `sample` folder.

@@ -28,3 +28,7 @@ from jobstreet.JobStreetExtractor import JobStreetExtractor
 extractor = JobStreetExtractor()
 df = extractor.find_jobs(keyword="Software", location=Location.KUALA_LUMPUR)
 ```
+
+# Sample
+
+See `sample` folder.
